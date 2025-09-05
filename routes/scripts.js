@@ -1,86 +1,150 @@
-const { Script, validate } = require("../models/script");
+const { validate } = require("../models/script");
 const express = require("express");
 const router = express.Router();
+const { pool } = require("../index"); // Import the pool
 
+// Get all scripts
 router.get("/", async (req, res) => {
+  let conn;
   try {
-    const scripts = await Script.find();
-    res.send(scripts);
+    conn = await pool.getConnection();
+    const rows = await conn.query("SELECT * FROM Scripts");
+    res.send(rows);
   } catch (error) {
-    res.status(500).send("Error fetching scripts", error.message);
+    console.error(error);
+    res.status(500).send("Error fetching scripts: " + error.message);
+  } finally {
+    if (conn) conn.release();
   }
 });
 
+// Create new script
 router.post("/", async (req, res) => {
+  let conn;
   try {
     const validation = validate(req.body);
     if (validation.error) {
-      res.status(400).send(validation.error.details[0].message);
-      return;
+      return res.status(400).send(validation.error.details[0].message);
     }
 
-    // Check if the script with the same name already exists
-    const existingScript = await Script.findOne({ name: req.body.name });
-    if (existingScript) {
+    const { name, category, description, status } = req.body;
+
+    conn = await pool.getConnection();
+
+    // Check if the script already exists
+    const existing = await conn.query("SELECT * FROM Scripts WHERE name = ?", [
+      name,
+    ]);
+    if (existing.length > 0) {
       return res.status(400).send("Script with the same name already exists.");
     }
 
-    const newScript = new Script(req.body);
-    await newScript.save();
-    return res.status(201).send(newScript);
+    // Insert new script
+    await conn.query(
+      "INSERT INTO Scripts (name, category, description, status) VALUES (?, ?, ?, ?)",
+      [name, category, description || null, status || null]
+    );
+
+    res.status(201).send({ name, category, description, status });
   } catch (error) {
-    res.status(500).send("Error creating script", error.message);
+    console.error(error);
+    res.status(500).send("Error creating script: " + error.message);
+  } finally {
+    if (conn) conn.release();
   }
 });
 
+// Get script by name (id = script name)
 router.get("/:id", async (req, res) => {
+  let conn;
   try {
-    const script = await Script.findById(req.params.id).populate(
-      "customer",
-      "name -_id"
+    const scriptName = req.params.id;
+    conn = await pool.getConnection();
+
+    const scriptRows = await conn.query(
+      "SELECT * FROM Scripts WHERE name = ?",
+      [scriptName]
     );
-    if (!script) {
+    if (scriptRows.length === 0) {
       return res.status(404).send("Script not found");
     }
+
+    const script = scriptRows[0];
+
+    // Fetch related customers
+    const customers = await conn.query(
+      `SELECT c.name 
+       FROM Customers c
+       JOIN ScriptCustomers sc ON c.name = sc.customer_name
+       WHERE sc.script_name = ?`,
+      [scriptName]
+    );
+
+    script.customers = customers.map((c) => c.name);
+
     res.send(script);
   } catch (error) {
-    res.status(500).send("Error fetching script", error.message);
+    console.error(error);
+    res.status(500).send("Error fetching script: " + error.message);
+  } finally {
+    if (conn) conn.release();
   }
 });
 
+// Delete script by name
 router.delete("/:id", async (req, res) => {
+  let conn;
   try {
-    const deletedScript = await Script.findByIdAndDelete(req.params.id);
-    if (!deletedScript) {
+    const scriptName = req.params.id;
+    conn = await pool.getConnection();
+
+    const result = await conn.query("DELETE FROM Scripts WHERE name = ?", [
+      scriptName,
+    ]);
+    if (result.affectedRows === 0) {
       return res.status(404).send("Script not found");
     }
-    res.send(deletedScript);
+
+    res.send({ message: "Script deleted successfully", scriptName });
   } catch (error) {
-    res.status(500).send("Error deleting script", error.message);
+    console.error(error);
+    res.status(500).send("Error deleting script: " + error.message);
+  } finally {
+    if (conn) conn.release();
   }
 });
 
+// Update script by name
 router.put("/:id", async (req, res) => {
+  let conn;
   try {
-    //Check if the request body is valid
     const validation = validate(req.body);
     if (validation.error) {
-      res.status(400).send(validation.error.details[0].message);
-      return;
+      return res.status(400).send(validation.error.details[0].message);
     }
 
-    //Find the script by ID and update it
-    const updatedScript = await Script.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
+    const scriptName = req.params.id;
+    const { name, category, description, status } = req.body;
+
+    conn = await pool.getConnection();
+
+    const result = await conn.query(
+      `UPDATE Scripts 
+       SET name = ?, category = ?, description = ?, status = ?
+       WHERE name = ?`,
+      [name, category, description || null, status || null, scriptName]
     );
-    if (!updatedScript) {
+
+    if (result.affectedRows === 0) {
       return res.status(404).send("Script not found");
     }
-    return res.send(updatedScript);
+
+    res.send({ name, category, description, status });
   } catch (error) {
-    res.status(500).send("Error updating script", error.message);
+    console.error(error);
+    res.status(500).send("Error updating script: " + error.message);
+  } finally {
+    if (conn) conn.release();
   }
 });
 

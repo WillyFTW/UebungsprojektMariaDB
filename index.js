@@ -1,10 +1,10 @@
 const express = require("express");
-const mongoose = require("mongoose");
 const cors = require("cors");
 const helmet = require("helmet");
 const scripts = require("./routes/scripts.js");
 const morgan = require("morgan");
 const error = require("./middleware/error.js");
+const mariadb = require("mariadb");
 
 //In case of unhandled exceptions or rejections, log them and exit the process.
 //We do this at the start of the programm to catch all errors.
@@ -16,6 +16,29 @@ process.on("uncaughtException", (ex) => {
 process.on("unhandledRejection", (ex) => {
   throw ex;
 });
+
+// Handle Ctrl+C and kill signals eg. from Docker
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
+
+const shutdown = async () => {
+  console.log("\nShutting down gracefully...");
+  try {
+    await pool.end(); // closes all active connections
+    console.log("Database pool closed.");
+    server.close(() => {
+      console.log("HTTP server closed.");
+      process.exit(0);
+    });
+  } catch (err) {
+    console.error("Error during shutdown:", err);
+    process.exit(1);
+  }
+};
+
+// Handle Ctrl+C and kill signals eg. from Docker
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 
 //Middleware
 const app = express();
@@ -30,15 +53,18 @@ app.use("/api/scripts", scripts);
 // Error handling middleware should be the last middleware
 app.use(error);
 
-// MongoDB Connection
-mongoose
-  .connect("mongodb://0.0.0.0:27017/scriptsdb")
-  .then(() => console.log("Connected to MongoDB..."))
-  .catch((err) => console.error("Connection failed..." + err));
+// Database connection
+const pool = mariadb.createPool({
+  host: "localhost",
+  user: "root",
+  password: "Wilhelm",
+  database: "uebungsprojekt",
+  connectionLimit: 5,
+});
 
 // Start
 const server = app.listen(3000, () =>
   console.log("Listening on port http://localhost:3000 ...")
 );
 
-module.exports = server;
+module.exports.pool = pool;
