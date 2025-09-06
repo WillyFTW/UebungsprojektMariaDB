@@ -12,9 +12,20 @@ router.get("/", async (req, res) => {
   let conn;
   try {
     conn = await pool.getConnection();
-    const rows = await conn.query(
-      "SELECT s.*, ss.status, sc.customer_name AS customer FROM Scripts s LEFT JOIN ScriptStatuses ss ON s.name = ss.script_name LEFT JOIN ScriptCustomers sc ON s.name = sc.script_name"
-    );
+    const rows = await conn.query(`
+      SELECT
+        s.name,
+        s.category,
+        s.description,
+        s.code,
+        COALESCE(JSON_ARRAYAGG(DISTINCT ss.status), JSON_ARRAY()) AS statuses,
+        COALESCE(JSON_ARRAYAGG(DISTINCT sc.customer_name), JSON_ARRAY()) AS customers
+      FROM Scripts s
+      LEFT JOIN ScriptStatuses ss ON s.name = ss.script_name
+      LEFT JOIN ScriptCustomers sc ON s.name = sc.script_name
+      GROUP BY s.name, s.category, s.description, s.code;
+    `);
+
     res.send(rows);
   } catch (error) {
     console.error(error);
@@ -27,8 +38,9 @@ router.get("/", async (req, res) => {
 // Create new script
 router.post("/", async (req, res) => {
   let conn;
-  // 1. Validate inputs
+
   try {
+    // 1. Validate inputs
     const validation = validate(req.body);
     if (validation.error) {
       return res.status(400).send(validation.error.details[0].message);
@@ -39,7 +51,7 @@ router.post("/", async (req, res) => {
     if (!name || !category || !code) {
       return res
         .status(400)
-        .json({ error: "Script name, category and code are required." });
+        .json({ error: "Script name, category, and code are required." });
     }
 
     if (!ALLOWED_CATEGORIES.includes(category)) {
@@ -53,25 +65,13 @@ router.post("/", async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    // 2. Check if script already exists
-    const [existing] = await conn.query(
-      "SELECT name FROM Scripts WHERE name = ?",
-      [name]
-    );
-    if (existing) {
-      await conn.rollback();
-      return res
-        .status(409)
-        .json({ error: `Script '${name}' already exists.` });
-    }
-
-    // 3. Insert script
+    // 2. Insert script (may throw if name already exists)
     await conn.query(
-      "INSERT INTO Scripts (name, code, description) VALUES (?, ?, ?)",
-      [name, code, description || ""]
+      "INSERT INTO Scripts (name, category, description, code) VALUES (?, ?, ?, ?)",
+      [name, category, description || "", code]
     );
 
-    // 4. Handle customers
+    // 3. Handle customers
     if (Array.isArray(customers)) {
       for (const customer of customers) {
         await conn.query("INSERT IGNORE INTO Customers (name) VALUES (?)", [
@@ -84,7 +84,7 @@ router.post("/", async (req, res) => {
       }
     }
 
-    // 5. Handle statuses
+    // 4. Handle statuses
     if (Array.isArray(statuses)) {
       for (const status of statuses) {
         if (!ALLOWED_STATUSES.includes(status)) {
@@ -95,7 +95,6 @@ router.post("/", async (req, res) => {
             )}`,
           });
         }
-
         await conn.query(
           "INSERT INTO ScriptStatuses (script_name, status) VALUES (?, ?)",
           [name, status]
@@ -107,6 +106,13 @@ router.post("/", async (req, res) => {
     res.status(201).json({ message: "Script created successfully." });
   } catch (err) {
     if (conn) await conn.rollback();
+
+    if (err.code === "ER_DUP_ENTRY") {
+      return res
+        .status(409)
+        .json({ error: `Script '${req.body.name}' already exists.` });
+    }
+
     console.error(err);
     res.status(500).json({ error: "Internal server error." });
   } finally {
@@ -114,58 +120,63 @@ router.post("/", async (req, res) => {
   }
 });
 
-// Get script by name
+// GET /scripts/:name → one script by name
 router.get("/:name", async (req, res) => {
+  const { name } = req.params;
   let conn;
+
   try {
-    const scriptName = req.params.name;
     conn = await pool.getConnection();
 
-    const scriptRows = await conn.query(
-      "SELECT * FROM Scripts WHERE name = ?",
-      [scriptName]
+    const rows = await conn.query(
+      `
+      SELECT
+        s.name,
+        s.category,
+        s.description,
+        s.code,
+        COALESCE(JSON_ARRAYAGG(DISTINCT ss.status), JSON_ARRAY()) AS statuses,
+        COALESCE(JSON_ARRAYAGG(DISTINCT sc.customer_name), JSON_ARRAY()) AS customers
+      FROM Scripts s
+      LEFT JOIN ScriptStatuses ss ON s.name = ss.script_name
+      LEFT JOIN ScriptCustomers sc ON s.name = sc.script_name
+      WHERE s.name = ?
+      GROUP BY s.name, s.category, s.description, s.code;
+      `,
+      [name]
     );
-    if (scriptRows.length === 0) {
+
+    if (rows.length === 0) {
       return res.status(404).send("Script not found");
     }
 
-    const script = scriptRows[0];
-
-    // Fetch related customers
-    const customers = await conn.query(
-      `SELECT c.name 
-       FROM Customers c
-       JOIN ScriptCustomers sc ON c.name = sc.customer_name
-       WHERE sc.script_name = ?`,
-      [scriptName]
-    );
-
-    script.customers = customers.map((c) => c.name);
-
-    res.send(script);
+    res.json(rows[0]); // return the single script object
   } catch (error) {
     console.error(error);
     res.status(500).send("Error fetching script: " + error.message);
   } finally {
-    if (conn) conn.release();
+    if (conn) conn.release(); // always release connection back to pool
   }
 });
 
-// Delete script by name
-router.delete("/:id", async (req, res) => {
+// DELETE /scripts/:name → delete a script by name
+router.delete("/:name", async (req, res) => {
+  const { name } = req.params;
   let conn;
+
   try {
-    const scriptName = req.params.id;
     conn = await pool.getConnection();
 
     const result = await conn.query("DELETE FROM Scripts WHERE name = ?", [
-      scriptName,
+      name,
     ]);
+
     if (result.affectedRows === 0) {
       return res.status(404).send("Script not found");
     }
 
-    res.send({ message: "Script deleted successfully", scriptName });
+    // 204 = No Content (successful deletion, nothing returned)
+    res.status(204).send();
   } catch (error) {
     console.error(error);
     res.status(500).send("Error deleting script: " + error.message);
@@ -174,35 +185,107 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-// Update script by name
-router.put("/:id", async (req, res) => {
+// Update existing script (with optional rename)
+router.put("/:name", async (req, res) => {
   let conn;
+  const oldName = req.params.name; // current script name in URL
+
   try {
+    // 1. Validate input
     const validation = validate(req.body);
     if (validation.error) {
       return res.status(400).send(validation.error.details[0].message);
     }
 
-    const scriptName = req.params.id;
-    const { name, category, description, status } = req.body;
+    const {
+      name: newName,
+      code,
+      category,
+      description,
+      customers,
+      statuses,
+    } = req.body;
+
+    if (!newName || !code || !category) {
+      return res
+        .status(400)
+        .json({ error: "Script name, category, and code are required." });
+    }
+
+    if (!ALLOWED_CATEGORIES.includes(category)) {
+      return res.status(400).json({
+        error: `Invalid category '${category}'. Allowed: ${ALLOWED_CATEGORIES.join(
+          ", "
+        )}`,
+      });
+    }
 
     conn = await pool.getConnection();
+    await conn.beginTransaction();
 
+    // 2. Update script (rename, code, category, description)
     const result = await conn.query(
-      `UPDATE Scripts 
-       SET name = ?, category = ?, description = ?, status = ?
-       WHERE name = ?`,
-      [name, category, description || null, status || null, scriptName]
+      "UPDATE Scripts SET name = ?, code = ?, category = ?, description = ? WHERE name = ?",
+      [newName, code, category, description || "", oldName]
     );
 
     if (result.affectedRows === 0) {
-      return res.status(404).send("Script not found");
+      await conn.rollback();
+      return res.status(404).json({ error: `Script '${oldName}' not found.` });
     }
 
-    res.send({ name, category, description, status });
-  } catch (error) {
-    console.error(error);
-    res.status(500).send("Error updating script: " + error.message);
+    // 3. Update customers
+    await conn.query("DELETE FROM ScriptCustomers WHERE script_name = ?", [
+      newName,
+    ]);
+    if (Array.isArray(customers)) {
+      for (const customer of customers) {
+        await conn.query("INSERT IGNORE INTO Customers (name) VALUES (?)", [
+          customer,
+        ]);
+        await conn.query(
+          "INSERT INTO ScriptCustomers (script_name, customer_name) VALUES (?, ?)",
+          [newName, customer]
+        );
+      }
+    }
+
+    // 4. Update statuses
+    await conn.query("DELETE FROM ScriptStatuses WHERE script_name = ?", [
+      newName,
+    ]);
+    if (Array.isArray(statuses)) {
+      for (const status of statuses) {
+        if (!ALLOWED_STATUSES.includes(status)) {
+          await conn.rollback();
+          return res.status(400).json({
+            error: `Invalid status '${status}'. Allowed: ${ALLOWED_STATUSES.join(
+              ", "
+            )}`,
+          });
+        }
+        await conn.query(
+          "INSERT INTO ScriptStatuses (script_name, status) VALUES (?, ?)",
+          [newName, status]
+        );
+      }
+    }
+
+    await conn.commit();
+    res.json({
+      message: `Script '${oldName}' updated successfully as '${newName}'.`,
+    });
+  } catch (err) {
+    if (conn) await conn.rollback();
+
+    if (err.code === "ER_DUP_ENTRY") {
+      return res
+        .status(409)
+        .json({ error: `Script name '${req.body.name}' already exists.` });
+    }
+
+    console.error(err);
+    res.status(500).json({ error: "Internal server error." });
   } finally {
     if (conn) conn.release();
   }
