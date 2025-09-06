@@ -4,7 +4,7 @@ const helmet = require("helmet");
 const scripts = require("./routes/scripts.js");
 const morgan = require("morgan");
 const error = require("./middleware/error.js");
-const mariadb = require("mariadb");
+const { pool } = require("./db"); // Import the pool
 
 //In case of unhandled exceptions or rejections, log them and exit the process.
 //We do this at the start of the programm to catch all errors.
@@ -17,10 +17,7 @@ process.on("unhandledRejection", (ex) => {
   throw ex;
 });
 
-// Handle Ctrl+C and kill signals eg. from Docker
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
-
+// Graceful shutdown
 const shutdown = async () => {
   console.log("\nShutting down gracefully...");
   try {
@@ -52,15 +49,6 @@ console.log("Request logger enabled...");
 app.use("/api/scripts", scripts);
 // Error handling middleware should be the last middleware
 app.use(error);
-
-// Database connection
-const pool = mariadb.createPool({
-  host: "localhost",
-  user: "root",
-  password: "Wilhelm",
-  database: "uebungsprojekt",
-  connectionLimit: 5,
-});
 
 // Start
 const server = app.listen(3000, () =>
