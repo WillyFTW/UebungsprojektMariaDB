@@ -175,8 +175,7 @@ router.delete("/:name", async (req, res) => {
       return res.status(404).send("Script not found");
     }
 
-    // 204 = No Content (successful deletion, nothing returned)
-    res.status(204).send();
+    res.status(200).json({ message: "Script deleted successfully" });
   } catch (error) {
     console.error(error);
     res.status(500).send("Error deleting script: " + error.message);
