@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const scripts = require("./routes/scripts.js");
+const customers = require("./routes/customers.js");
 const morgan = require("morgan");
 const error = require("./middleware/error.js");
 const { pool } = require("./db"); // Import the pool
@@ -47,6 +48,7 @@ console.log("Request logger enabled...");
 
 // Routes
 app.use("/api/scripts", scripts);
+app.use("/api/customers", customers);
 // Error handling middleware should be the last middleware
 app.use(error);
 
