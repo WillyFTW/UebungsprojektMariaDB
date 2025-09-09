@@ -13,17 +13,22 @@ router.get("/", async (req, res) => {
   try {
     conn = await pool.getConnection();
     const rows = await conn.query(`
-      SELECT
-        s.name,
-        s.category,
-        s.description,
-        s.code,
-        COALESCE(JSON_ARRAYAGG(DISTINCT ss.status), JSON_ARRAY()) AS statuses,
-        COALESCE(JSON_ARRAYAGG(DISTINCT sc.customer_name), JSON_ARRAY()) AS customers
-      FROM Scripts s
-      LEFT JOIN ScriptStatuses ss ON s.name = ss.script_name
-      LEFT JOIN ScriptCustomers sc ON s.name = sc.script_name
-      GROUP BY s.name, s.category, s.description, s.code;
+    SELECT
+    s.name,
+    s.category,
+    s.description,
+    s.code,
+    COALESCE((
+        SELECT JSON_ARRAYAGG(DISTINCT ss.status)
+        FROM ScriptStatuses ss
+        WHERE ss.script_name = s.name AND ss.status IS NOT NULL
+    ), JSON_ARRAY()) AS statuses,
+    COALESCE((
+        SELECT JSON_ARRAYAGG(DISTINCT sc.customer_name)
+        FROM ScriptCustomers sc
+        WHERE sc.script_name = s.name AND sc.customer_name IS NOT NULL
+    ), JSON_ARRAY()) AS customers
+FROM Scripts s;
     `);
 
     res.send(rows);
@@ -131,17 +136,22 @@ router.get("/:name", async (req, res) => {
     const rows = await conn.query(
       `
       SELECT
-        s.name,
-        s.category,
-        s.description,
-        s.code,
-        COALESCE(JSON_ARRAYAGG(DISTINCT ss.status), JSON_ARRAY()) AS statuses,
-        COALESCE(JSON_ARRAYAGG(DISTINCT sc.customer_name), JSON_ARRAY()) AS customers
+      s.name,
+      s.category,
+      s.description,
+      s.code,
+      COALESCE((
+          SELECT JSON_ARRAYAGG(DISTINCT ss.status)
+          FROM ScriptStatuses ss
+          WHERE ss.script_name = s.name AND ss.status IS NOT NULL
+      ), JSON_ARRAY()) AS statuses,
+      COALESCE((
+          SELECT JSON_ARRAYAGG(DISTINCT sc.customer_name)
+          FROM ScriptCustomers sc
+          WHERE sc.script_name = s.name AND sc.customer_name IS NOT NULL
+      ), JSON_ARRAY()) AS customers
       FROM Scripts s
-      LEFT JOIN ScriptStatuses ss ON s.name = ss.script_name
-      LEFT JOIN ScriptCustomers sc ON s.name = sc.script_name
-      WHERE s.name = ?
-      GROUP BY s.name, s.category, s.description, s.code;
+      WHERE s.name = ?;
       `,
       [name]
     );
