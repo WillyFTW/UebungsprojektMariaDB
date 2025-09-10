@@ -31,10 +31,10 @@ router.get("/", async (req, res) => {
 FROM Scripts s;
     `);
 
-    res.send(rows);
+    res.json(rows);
   } catch (error) {
     console.error(error);
-    res.status(500).send("Error fetching scripts: " + error.message);
+    res.status(500).json({ error: "Error fetching scripts: " + error.message });
   } finally {
     if (conn) conn.release();
   }
@@ -48,7 +48,9 @@ router.post("/", async (req, res) => {
     // 1. Validate inputs
     const validation = validate(req.body);
     if (validation.error) {
-      return res.status(400).send(validation.error.details[0].message);
+      return res
+        .status(400)
+        .json({ error: validation.error.details[0].message });
     }
 
     const { name, code, category, description, customers, statuses } = req.body;
@@ -157,13 +159,13 @@ router.get("/:name", async (req, res) => {
     );
 
     if (rows.length === 0) {
-      return res.status(404).send("Script not found");
+      return res.status(404).json({ error: "Script not found" });
     }
 
     res.json(rows[0]); // return the single script object
   } catch (error) {
     console.error(error);
-    res.status(500).send("Error fetching script: " + error.message);
+    res.status(500).json({ error: "Error fetching script: " + error.message });
   } finally {
     if (conn) conn.release(); // always release connection back to pool
   }
@@ -182,13 +184,13 @@ router.delete("/:name", async (req, res) => {
     ]);
 
     if (result.affectedRows === 0) {
-      return res.status(404).send("Script not found");
+      return res.status(404).json({ error: "Script not found" });
     }
 
     res.status(200).json({ message: "Script deleted successfully" });
   } catch (error) {
     console.error(error);
-    res.status(500).send("Error deleting script: " + error.message);
+    res.status(500).json({ error: "Error deleting script: " + error.message });
   } finally {
     if (conn) conn.release();
   }
@@ -203,7 +205,10 @@ router.put("/:name", async (req, res) => {
     // 1. Validate input
     const validation = validate(req.body);
     if (validation.error) {
-      return res.status(400).send(validation.error.details[0].message);
+      console.log(validation.error);
+      return res
+        .status(400)
+        .json({ error: validation.error.details[0].message });
     }
 
     const {
@@ -281,7 +286,7 @@ router.put("/:name", async (req, res) => {
     }
 
     await conn.commit();
-    res.json({
+    res.status(200).json({
       message: `Script '${oldName}' updated successfully as '${newName}'.`,
     });
   } catch (err) {

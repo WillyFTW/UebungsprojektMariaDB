@@ -11,7 +11,7 @@ function validateScript(script) {
       .valid("Safety", "Software", "Configuration", "Command")
       .required(),
 
-    description: Joi.string().max(500).default(""),
+    description: Joi.string().max(500).allow("").default(""),
 
     customers: Joi.array().items(Joi.string().min(1)).default([]),
 
