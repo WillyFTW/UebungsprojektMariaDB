@@ -18,17 +18,13 @@ router.get("/", async (req, res) => {
     s.category,
     s.description,
     s.code,
-    COALESCE((
-        SELECT JSON_ARRAYAGG(DISTINCT ss.status)
-        FROM ScriptStatuses ss
-        WHERE ss.script_name = s.name AND ss.status IS NOT NULL
-    ), JSON_ARRAY()) AS statuses,
-    COALESCE((
-        SELECT JSON_ARRAYAGG(DISTINCT sc.customer_name)
-        FROM ScriptCustomers sc
-        WHERE sc.script_name = s.name AND sc.customer_name IS NOT NULL
-    ), JSON_ARRAY()) AS customers
-FROM Scripts s;
+    COALESCE((SELECT JSON_ARRAYAGG(DISTINCT ss.status)
+              FROM scriptstatuses ss
+              WHERE ss.script_name = s.name AND ss.status IS NOT NULL), JSON_ARRAY()) AS statuses,
+    COALESCE((SELECT JSON_ARRAYAGG(DISTINCT sc.customer_name)
+              FROM scriptcustomers sc
+              WHERE sc.script_name = s.name AND sc.customer_name IS NOT NULL), JSON_ARRAY()) AS customers
+    FROM scripts s;
     `);
 
     res.json(rows);
@@ -74,18 +70,18 @@ router.post("/", async (req, res) => {
 
     // 2. Insert script (may throw if name already exists)
     await conn.query(
-      "INSERT INTO Scripts (name, category, description, code) VALUES (?, ?, ?, ?)",
+      "INSERT INTO scripts (name, category, description, code) VALUES (?, ?, ?, ?)",
       [name, category, description || "", code]
     );
 
     // 3. Handle customers
     if (Array.isArray(customers)) {
       for (const customer of customers) {
-        await conn.query("INSERT IGNORE INTO Customers (name) VALUES (?)", [
+        await conn.query("INSERT IGNORE INTO customers (name) VALUES (?)", [
           customer,
         ]);
         await conn.query(
-          "INSERT INTO ScriptCustomers (script_name, customer_name) VALUES (?, ?)",
+          "INSERT INTO scriptcustomers (script_name, customer_name) VALUES (?, ?)",
           [name, customer]
         );
       }
@@ -103,7 +99,7 @@ router.post("/", async (req, res) => {
           });
         }
         await conn.query(
-          "INSERT INTO ScriptStatuses (script_name, status) VALUES (?, ?)",
+          "INSERT INTO scriptstatuses (script_name, status) VALUES (?, ?)",
           [name, status]
         );
       }
@@ -142,17 +138,13 @@ router.get("/:name", async (req, res) => {
       s.category,
       s.description,
       s.code,
-      COALESCE((
-          SELECT JSON_ARRAYAGG(DISTINCT ss.status)
-          FROM ScriptStatuses ss
-          WHERE ss.script_name = s.name AND ss.status IS NOT NULL
-      ), JSON_ARRAY()) AS statuses,
-      COALESCE((
-          SELECT JSON_ARRAYAGG(DISTINCT sc.customer_name)
-          FROM ScriptCustomers sc
-          WHERE sc.script_name = s.name AND sc.customer_name IS NOT NULL
-      ), JSON_ARRAY()) AS customers
-      FROM Scripts s
+      COALESCE((SELECT JSON_ARRAYAGG(DISTINCT ss.status)
+                FROM scriptstatuses ss
+                WHERE ss.script_name = s.name AND ss.status IS NOT NULL), JSON_ARRAY()) AS statuses,
+      COALESCE((SELECT JSON_ARRAYAGG(DISTINCT sc.customer_name)
+                FROM scriptcustomers sc
+                WHERE sc.script_name = s.name AND sc.customer_name IS NOT NULL), JSON_ARRAY()) AS customers
+      FROM scripts s
       WHERE s.name = ?;
       `,
       [name]
@@ -179,7 +171,7 @@ router.delete("/:name", async (req, res) => {
   try {
     conn = await pool.getConnection();
 
-    const result = await conn.query("DELETE FROM Scripts WHERE name = ?", [
+    const result = await conn.query("DELETE FROM scripts WHERE name = ?", [
       name,
     ]);
 
@@ -239,7 +231,7 @@ router.put("/:name", async (req, res) => {
 
     // 2. Update script (rename, code, category, description)
     const result = await conn.query(
-      "UPDATE Scripts SET name = ?, code = ?, category = ?, description = ? WHERE name = ?",
+      "UPDATE scripts SET name = ?, code = ?, category = ?, description = ? WHERE name = ?",
       [newName, code, category, description || "", oldName]
     );
 
@@ -249,23 +241,23 @@ router.put("/:name", async (req, res) => {
     }
 
     // 3. Update customers
-    await conn.query("DELETE FROM ScriptCustomers WHERE script_name = ?", [
+    await conn.query("DELETE FROM scriptcustomers WHERE script_name = ?", [
       newName,
     ]);
     if (Array.isArray(customers)) {
       for (const customer of customers) {
-        await conn.query("INSERT IGNORE INTO Customers (name) VALUES (?)", [
+        await conn.query("INSERT IGNORE INTO customers (name) VALUES (?)", [
           customer,
         ]);
         await conn.query(
-          "INSERT INTO ScriptCustomers (script_name, customer_name) VALUES (?, ?)",
+          "INSERT INTO scriptcustomers (script_name, customer_name) VALUES (?, ?)",
           [newName, customer]
         );
       }
     }
 
     // 4. Update statuses
-    await conn.query("DELETE FROM ScriptStatuses WHERE script_name = ?", [
+    await conn.query("DELETE FROM scriptstatuses WHERE script_name = ?", [
       newName,
     ]);
     if (Array.isArray(statuses)) {
@@ -279,7 +271,7 @@ router.put("/:name", async (req, res) => {
           });
         }
         await conn.query(
-          "INSERT INTO ScriptStatuses (script_name, status) VALUES (?, ?)",
+          "INSERT INTO scriptstatuses (script_name, status) VALUES (?, ?)",
           [newName, status]
         );
       }
