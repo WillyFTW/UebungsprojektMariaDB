@@ -7,8 +7,7 @@ const morgan = require("morgan");
 const error = require("./middleware/error.js");
 const { pool } = require("./db"); // Import the pool
 
-//In case of unhandled exceptions or rejections, log them and exit the process.
-//We do this at the start of the programm to catch all errors.
+// In case of unhandled exceptions or rejections, log them and exit the process.
 process.on("uncaughtException", (ex) => {
   console.log(ex.message, ex);
   process.exit(1);
@@ -38,7 +37,7 @@ const shutdown = async () => {
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
-//Middleware
+// Middleware
 const app = express();
 app.use(express.json());
 app.use(cors());
@@ -58,9 +57,12 @@ app.use("/api/customers", customers);
 // Error handling middleware should be the last middleware
 app.use(error);
 
-// Start
-const server = app.listen(3000, () =>
-  console.log("Listening on port http://localhost:3000 ...")
-);
+// Start the server (only for local development)
+if (process.env.NODE_ENV !== "production") {
+  const server = app.listen(3000, () =>
+    console.log("Listening on port http://localhost:3000 ...")
+  );
+}
 
-module.exports.pool = pool;
+// Export the app for Vercel
+module.exports = app;
