@@ -46,9 +46,15 @@ app.use(helmet());
 app.use(morgan("tiny"));
 console.log("Request logger enabled...");
 
+// Root route
+app.get("/", (req, res) => {
+  res.send("Welcome to the Scripts API!");
+});
+
 // Routes
 app.use("/api/scripts", scripts);
 app.use("/api/customers", customers);
+
 // Error handling middleware should be the last middleware
 app.use(error);
 
