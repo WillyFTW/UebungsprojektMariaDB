@@ -27,7 +27,14 @@ router.get("/", async (req, res) => {
     FROM scripts s;
     `);
 
-    res.json(rows);
+    // Parse JSON strings into JavaScript arrays
+    const parsedRows = rows.map((row) => ({
+      ...row,
+      statuses: JSON.parse(row.statuses),
+      customers: JSON.parse(row.customers),
+    }));
+
+    res.json(parsedRows);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error fetching scripts: " + error.message });
@@ -67,12 +74,16 @@ router.get("/:name", async (req, res) => {
       return res.status(404).json({ error: "Script not found" });
     }
 
-    res.json(rows[0]); // return the single script object
+    const script = rows[0];
+    script.statuses = JSON.parse(script.statuses);
+    script.customers = JSON.parse(script.customers);
+
+    res.json(script);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error fetching script: " + error.message });
   } finally {
-    if (conn) conn.release(); // always release connection back to pool
+    if (conn) conn.release();
   }
 });
 
