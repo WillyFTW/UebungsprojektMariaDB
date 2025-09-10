@@ -11,7 +11,7 @@ router.get("/", async (req, res) => {
     const rows = await conn.query(`
         SELECT
         c.name
-        FROM Customers c
+        FROM customers c
     `);
 
     res.send(rows);
