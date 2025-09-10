@@ -18,12 +18,12 @@ router.get("/", async (req, res) => {
     s.category,
     s.description,
     s.code,
-    COALESCE((SELECT JSON_ARRAYAGG(DISTINCT ss.status)
-              FROM scriptstatuses ss
-              WHERE ss.script_name = s.name AND ss.status IS NOT NULL), JSON_ARRAY()) AS statuses,
-    COALESCE((SELECT JSON_ARRAYAGG(DISTINCT sc.customer_name)
-              FROM scriptcustomers sc
-              WHERE sc.script_name = s.name AND sc.customer_name IS NOT NULL), JSON_ARRAY()) AS customers
+    CAST(COALESCE((SELECT JSON_ARRAYAGG(DISTINCT ss.status)
+                   FROM scriptstatuses ss
+                   WHERE ss.script_name = s.name AND ss.status IS NOT NULL), JSON_ARRAY()) AS JSON) AS statuses,
+    CAST(COALESCE((SELECT JSON_ARRAYAGG(DISTINCT sc.customer_name)
+                   FROM scriptcustomers sc
+                   WHERE sc.script_name = s.name AND sc.customer_name IS NOT NULL), JSON_ARRAY()) AS JSON) AS customers
     FROM scripts s;
     `);
 
@@ -33,6 +33,46 @@ router.get("/", async (req, res) => {
     res.status(500).json({ error: "Error fetching scripts: " + error.message });
   } finally {
     if (conn) conn.release();
+  }
+});
+
+// GET /scripts/:name → one script by name
+router.get("/:name", async (req, res) => {
+  const { name } = req.params;
+  let conn;
+
+  try {
+    conn = await pool.getConnection();
+
+    const rows = await conn.query(
+      `
+      SELECT
+      s.name,
+      s.category,
+      s.description,
+      s.code,
+      CAST(COALESCE((SELECT JSON_ARRAYAGG(DISTINCT ss.status)
+                     FROM scriptstatuses ss
+                     WHERE ss.script_name = s.name AND ss.status IS NOT NULL), JSON_ARRAY()) AS JSON) AS statuses,
+      CAST(COALESCE((SELECT JSON_ARRAYAGG(DISTINCT sc.customer_name)
+                     FROM scriptcustomers sc
+                     WHERE sc.script_name = s.name AND sc.customer_name IS NOT NULL), JSON_ARRAY()) AS JSON) AS customers
+      FROM scripts s
+      WHERE s.name = ?;
+      `,
+      [name]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Script not found" });
+    }
+
+    res.json(rows[0]); // return the single script object
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error fetching script: " + error.message });
+  } finally {
+    if (conn) conn.release(); // always release connection back to pool
   }
 });
 
@@ -120,46 +160,6 @@ router.post("/", async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   } finally {
     if (conn) conn.release();
-  }
-});
-
-// GET /scripts/:name → one script by name
-router.get("/:name", async (req, res) => {
-  const { name } = req.params;
-  let conn;
-
-  try {
-    conn = await pool.getConnection();
-
-    const rows = await conn.query(
-      `
-      SELECT
-      s.name,
-      s.category,
-      s.description,
-      s.code,
-      COALESCE((SELECT JSON_ARRAYAGG(DISTINCT ss.status)
-                FROM scriptstatuses ss
-                WHERE ss.script_name = s.name AND ss.status IS NOT NULL), JSON_ARRAY()) AS statuses,
-      COALESCE((SELECT JSON_ARRAYAGG(DISTINCT sc.customer_name)
-                FROM scriptcustomers sc
-                WHERE sc.script_name = s.name AND sc.customer_name IS NOT NULL), JSON_ARRAY()) AS customers
-      FROM scripts s
-      WHERE s.name = ?;
-      `,
-      [name]
-    );
-
-    if (rows.length === 0) {
-      return res.status(404).json({ error: "Script not found" });
-    }
-
-    res.json(rows[0]); // return the single script object
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Error fetching script: " + error.message });
-  } finally {
-    if (conn) conn.release(); // always release connection back to pool
   }
 });
 
