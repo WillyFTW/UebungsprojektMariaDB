@@ -18,12 +18,12 @@ router.get("/", async (req, res) => {
     s.category,
     s.description,
     s.code,
-    CAST(COALESCE((SELECT JSON_ARRAYAGG(DISTINCT ss.status)
-                   FROM scriptstatuses ss
-                   WHERE ss.script_name = s.name AND ss.status IS NOT NULL), JSON_ARRAY()) AS JSON) AS statuses,
-    CAST(COALESCE((SELECT JSON_ARRAYAGG(DISTINCT sc.customer_name)
-                   FROM scriptcustomers sc
-                   WHERE sc.script_name = s.name AND sc.customer_name IS NOT NULL), JSON_ARRAY()) AS JSON) AS customers
+    COALESCE((SELECT JSON_ARRAYAGG(DISTINCT ss.status)
+               FROM scriptstatuses ss
+               WHERE ss.script_name = s.name AND ss.status IS NOT NULL), JSON_ARRAY()) AS statuses,
+    COALESCE((SELECT JSON_ARRAYAGG(DISTINCT sc.customer_name)
+               FROM scriptcustomers sc
+               WHERE sc.script_name = s.name AND sc.customer_name IS NOT NULL), JSON_ARRAY()) AS customers
     FROM scripts s;
     `);
 
@@ -51,12 +51,12 @@ router.get("/:name", async (req, res) => {
       s.category,
       s.description,
       s.code,
-      CAST(COALESCE((SELECT JSON_ARRAYAGG(DISTINCT ss.status)
-                     FROM scriptstatuses ss
-                     WHERE ss.script_name = s.name AND ss.status IS NOT NULL), JSON_ARRAY()) AS JSON) AS statuses,
-      CAST(COALESCE((SELECT JSON_ARRAYAGG(DISTINCT sc.customer_name)
-                     FROM scriptcustomers sc
-                     WHERE sc.script_name = s.name AND sc.customer_name IS NOT NULL), JSON_ARRAY()) AS JSON) AS customers
+      COALESCE((SELECT JSON_ARRAYAGG(DISTINCT ss.status)
+                 FROM scriptstatuses ss
+                 WHERE ss.script_name = s.name AND ss.status IS NOT NULL), JSON_ARRAY()) AS statuses,
+      COALESCE((SELECT JSON_ARRAYAGG(DISTINCT sc.customer_name)
+                 FROM scriptcustomers sc
+                 WHERE sc.script_name = s.name AND sc.customer_name IS NOT NULL), JSON_ARRAY()) AS customers
       FROM scripts s
       WHERE s.name = ?;
       `,
