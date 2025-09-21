@@ -1,13 +1,13 @@
 const { validate } = require("../models/customer");
 const express = require("express");
 const router = express.Router();
-const { createConnection } = require("../db"); // Import the createConnection function
+const { pool } = require("../db"); // Import the pool
 
 // Get all customers
 router.get("/", async (req, res) => {
   let conn;
   try {
-    conn = await createConnection(); // Create a new connection
+    conn = await pool.getConnection();
     const rows = await conn.query(`
         SELECT
         c.name
@@ -17,9 +17,9 @@ router.get("/", async (req, res) => {
     res.send(rows);
   } catch (error) {
     console.error(error);
-    res.status(500).send("Error fetching customers: " + error.message);
+    res.status(500).send("Error fetching scripts: " + error.message);
   } finally {
-    if (conn) await conn.end(); // Close the connection
+    if (conn) conn.release();
   }
 });
 

@@ -5,6 +5,7 @@ const scripts = require("./routes/scripts.js");
 const customers = require("./routes/customers.js");
 const morgan = require("morgan");
 const error = require("./middleware/error.js");
+const { pool } = require("./db"); // Import the pool
 
 const app = express();
 
@@ -31,6 +32,8 @@ app.use(error);
 const shutdown = async (signal) => {
   console.log(`\nReceived ${signal}. Shutting down gracefully...`);
   try {
+    await pool.end(); // Close all active database connections
+    console.log("Database pool closed.");
     server.close(() => {
       console.log("HTTP server closed.");
       process.exit(0);
