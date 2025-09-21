@@ -1,6 +1,4 @@
 const mariadb = require("mariadb");
-import { attachDatabasePool } from "@vercel/functions";
-
 require("dotenv").config(); // Load environment variables from .env file
 
 // Dynamically create the pool based on the environment
@@ -25,10 +23,5 @@ const pool = mariadb.createPool(
         connectionLimit: 5,
       }
 );
-
-if (process.env.NODE_ENV === "production") {
-  // Attach the pool to ensure idle connections close before suspension
-  attachDatabasePool(pool);
-}
 
 module.exports.pool = pool;

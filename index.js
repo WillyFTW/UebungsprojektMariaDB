@@ -7,9 +7,38 @@ const morgan = require("morgan");
 const error = require("./middleware/error.js");
 const { pool } = require("./db"); // Import the pool
 
-const app = express();
+// In case of unhandled exceptions or rejections, log them and exit the process.
+process.on("uncaughtException", (ex) => {
+  console.log(ex.message, ex);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (ex) => {
+  throw ex;
+});
+
+// Graceful shutdown
+const shutdown = async () => {
+  console.log("\nShutting down gracefully...");
+  try {
+    await pool.end(); // closes all active connections
+    console.log("Database pool closed.");
+    server.close(() => {
+      console.log("HTTP server closed.");
+      process.exit(0);
+    });
+  } catch (err) {
+    console.error("Error during shutdown:", err);
+    process.exit(1);
+  }
+};
+
+// Handle Ctrl+C and kill signals eg. from Docker
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 
 // Middleware
+const app = express();
 app.use(express.json());
 app.use(cors());
 app.use(helmet());
@@ -25,45 +54,12 @@ app.get("/", (req, res) => {
 app.use("/api/scripts", scripts);
 app.use("/api/customers", customers);
 
-// Error handling middleware (should be the last middleware)
+// Error handling middleware should be the last middleware
 app.use(error);
 
-// Graceful shutdown logic
-const shutdown = async (signal) => {
-  console.log(`\nReceived ${signal}. Shutting down gracefully...`);
-  try {
-    await pool.end(); // Close all active database connections
-    console.log("Database pool closed.");
-    server.close(() => {
-      console.log("HTTP server closed.");
-      process.exit(0);
-    });
-  } catch (err) {
-    console.error("Error during shutdown:", err);
-    process.exit(1);
-  }
-};
-
-// Handle termination signals (e.g., Ctrl+C, Docker stop)
-["SIGINT", "SIGTERM"].forEach((signal) => {
-  process.on(signal, () => shutdown(signal));
-});
-
-// Handle uncaught exceptions and unhandled promise rejections
-process.on("uncaughtException", (err) => {
-  console.error("Uncaught Exception:", err);
-  shutdown("uncaughtException");
-});
-
-process.on("unhandledRejection", (reason) => {
-  console.error("Unhandled Rejection:", reason);
-  shutdown("unhandledRejection");
-});
-
 // Start the server (only for local development)
-let server;
 if (process.env.NODE_ENV !== "production") {
-  server = app.listen(3000, () =>
+  const server = app.listen(3000, () =>
     console.log("Listening on port http://localhost:3000 ...")
   );
 }
