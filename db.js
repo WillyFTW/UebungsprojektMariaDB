@@ -32,4 +32,19 @@ const pool = mariadb.createPool(
       }
 );
 
+const configureTimeouts = async () => {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    // Set server-side timeouts
+    await conn.query("SET GLOBAL wait_timeout = 1800"); // 30 minutes
+    await conn.query("SET GLOBAL interactive_timeout = 1800"); // 30 minutes
+    console.log("Timeouts configured successfully.");
+  } catch (err) {
+    console.error("Error configuring timeouts:", err);
+  } finally {
+    if (conn) conn.release(); // Release the connection back to the pool
+  }
+};
+configureTimeouts(); // Call the function to set timeouts
 module.exports.pool = pool;
