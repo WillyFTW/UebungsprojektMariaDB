@@ -10,17 +10,25 @@ const pool = mariadb.createPool(
         password: process.env.DB_PASSWORD,
         database: process.env.DB_NAME,
         port: process.env.DB_PORT || 3306,
-        connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT, 10) || 5, // Default to 5 if not set
+        connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT, 20) || 20, // Default to 5 if not set
         ssl: {
           rejectUnauthorized: true,
         },
+        minDelayValidation: 500, // Only validate connections unused for 500ms
+        pingTimeout: 1000, // Timeout for ping validation
+        leakDetectionTimeout: 10000, // Log connections not returned to the pool within 10 seconds
+        acquireTimeout: 15000, // Timeout for acquiring a connection
       }
     : {
         host: "localhost",
         user: "root",
         password: "Wilhelm",
         database: "scriptsdb",
-        connectionLimit: 5,
+        connectionLimit: 20,
+        minDelayValidation: 500, // Only validate connections unused for 500ms
+        pingTimeout: 1000, // Timeout for ping validation
+        leakDetectionTimeout: 10000, // Log connections not returned to the pool within 10 seconds
+        acquireTimeout: 15000, // Timeout for acquiring a connection
       }
 );
 

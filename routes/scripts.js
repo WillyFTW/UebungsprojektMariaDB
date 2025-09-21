@@ -39,6 +39,11 @@ router.get("/", async (req, res) => {
     console.error(error);
     res.status(500).json({ error: "Error fetching scripts: " + error.message });
   } finally {
+    if (pool) {
+      console.log(
+        `Pool status: ${pool.activeConnections()}/${pool.totalConnections()} active, ${pool.idleConnections()} idle, ${pool.taskQueueSize()} queued`
+      );
+    }
     if (conn) conn.release();
   }
 });
