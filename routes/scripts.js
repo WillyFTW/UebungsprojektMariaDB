@@ -34,9 +34,26 @@ router.get("/", async (req, res) => {
       customers: JSON.parse(row.customers),
     }));
 
+    // Log Pool status for debugging
+    console.log("Database Pool Status:", {
+      totalConnections: pool._allConnections.length,
+      freeConnections: pool._freeConnections.length,
+      busyConnections:
+        pool._allConnections.length - pool._freeConnections.length,
+      pendingConnections: pool._connectionQueue.length,
+    });
+
     res.json(parsedRows);
   } catch (error) {
     console.error(error);
+    // Log Pool status for debugging
+    console.log("Database Pool Status:", {
+      totalConnections: pool._allConnections.length,
+      freeConnections: pool._freeConnections.length,
+      busyConnections:
+        pool._allConnections.length - pool._freeConnections.length,
+      pendingConnections: pool._connectionQueue.length,
+    });
     res.status(500).json({ error: "Error fetching scripts: " + error.message });
   } finally {
     if (conn) conn.release();
