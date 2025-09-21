@@ -1,7 +1,7 @@
 const { validate } = require("../models/script");
 const express = require("express");
 const router = express.Router();
-const { pool } = require("../db"); // Import the pool
+const { createConnection } = require("../db"); // Import the connection function
 
 // Allowed statuses
 const ALLOWED_CATEGORIES = ["Safety", "Software", "Configuration", "Command"];
@@ -11,20 +11,20 @@ const ALLOWED_STATUSES = ["Global", "Auto"];
 router.get("/", async (req, res) => {
   let conn;
   try {
-    conn = await pool.getConnection();
+    conn = await createConnection(); // Create a new connection
     const rows = await conn.query(`
-    SELECT
-    s.name,
-    s.category,
-    s.description,
-    s.code,
-    COALESCE((SELECT JSON_ARRAYAGG(DISTINCT ss.status)
-               FROM scriptstatuses ss
-               WHERE ss.script_name = s.name AND ss.status IS NOT NULL), JSON_ARRAY()) AS statuses,
-    COALESCE((SELECT JSON_ARRAYAGG(DISTINCT sc.customer_name)
-               FROM scriptcustomers sc
-               WHERE sc.script_name = s.name AND sc.customer_name IS NOT NULL), JSON_ARRAY()) AS customers
-    FROM scripts s;
+      SELECT
+      s.name,
+      s.category,
+      s.description,
+      s.code,
+      COALESCE((SELECT JSON_ARRAYAGG(DISTINCT ss.status)
+                 FROM scriptstatuses ss
+                 WHERE ss.script_name = s.name AND ss.status IS NOT NULL), JSON_ARRAY()) AS statuses,
+      COALESCE((SELECT JSON_ARRAYAGG(DISTINCT sc.customer_name)
+                 FROM scriptcustomers sc
+                 WHERE sc.script_name = s.name AND sc.customer_name IS NOT NULL), JSON_ARRAY()) AS customers
+      FROM scripts s;
     `);
 
     // Parse JSON strings into JavaScript arrays
@@ -34,29 +34,14 @@ router.get("/", async (req, res) => {
       customers: JSON.parse(row.customers),
     }));
 
-    // Log Pool status for debugging
-    console.log("Database Pool Status:", {
-      totalConnections: pool._allConnections.length,
-      freeConnections: pool._freeConnections.length,
-      busyConnections:
-        pool._allConnections.length - pool._freeConnections.length,
-      pendingConnections: pool._connectionQueue.length,
-    });
-
     res.json(parsedRows);
   } catch (error) {
     console.error(error);
     // Log Pool status for debugging
-    console.log("Database Pool Status:", {
-      totalConnections: pool._allConnections.length,
-      freeConnections: pool._freeConnections.length,
-      busyConnections:
-        pool._allConnections.length - pool._freeConnections.length,
-      pendingConnections: pool._connectionQueue.length,
-    });
+
     res.status(500).json({ error: "Error fetching scripts: " + error.message });
   } finally {
-    if (conn) conn.release();
+    if (conn) await conn.end(); // Close the connection
   }
 });
 
@@ -66,7 +51,7 @@ router.get("/:name", async (req, res) => {
   let conn;
 
   try {
-    conn = await pool.getConnection();
+    conn = await createConnection(); // Create a new connection
 
     const rows = await conn.query(
       `
@@ -100,7 +85,7 @@ router.get("/:name", async (req, res) => {
     console.error(error);
     res.status(500).json({ error: "Error fetching script: " + error.message });
   } finally {
-    if (conn) conn.release();
+    if (conn) await conn.end(); // Close the connection
   }
 });
 
@@ -133,7 +118,7 @@ router.post("/", async (req, res) => {
       });
     }
 
-    conn = await pool.getConnection();
+    conn = await createConnection(); // Create a new connection
     await conn.beginTransaction();
 
     // 2. Insert script (may throw if name already exists)
@@ -187,7 +172,7 @@ router.post("/", async (req, res) => {
     console.error(err);
     res.status(500).json({ error: "Internal server error." });
   } finally {
-    if (conn) conn.release();
+    if (conn) await conn.end(); // Close the connection
   }
 });
 
@@ -197,7 +182,7 @@ router.delete("/:name", async (req, res) => {
   let conn;
 
   try {
-    conn = await pool.getConnection();
+    conn = await createConnection(); // Create a new connection
 
     const result = await conn.query("DELETE FROM scripts WHERE name = ?", [
       name,
@@ -212,7 +197,7 @@ router.delete("/:name", async (req, res) => {
     console.error(error);
     res.status(500).json({ error: "Error deleting script: " + error.message });
   } finally {
-    if (conn) conn.release();
+    if (conn) await conn.end(); // Close the connection
   }
 });
 
@@ -254,7 +239,7 @@ router.put("/:name", async (req, res) => {
       });
     }
 
-    conn = await pool.getConnection();
+    conn = await createConnection(); // Create a new connection
     await conn.beginTransaction();
 
     // 2. Update script (rename, code, category, description)
@@ -321,7 +306,7 @@ router.put("/:name", async (req, res) => {
     console.error(err);
     res.status(500).json({ error: "Internal server error." });
   } finally {
-    if (conn) conn.release();
+    if (conn) await conn.end(); // Close the connection
   }
 });
 
