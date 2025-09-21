@@ -37,6 +37,7 @@ router.get("/", async (req, res) => {
     res.json(parsedRows);
   } catch (error) {
     console.error(error);
+    // Log Pool status for debugging
 
     res.status(500).json({ error: "Error fetching scripts: " + error.message });
   } finally {
