@@ -34,10 +34,6 @@ router.get("/", async (req, res) => {
       customers: JSON.parse(row.customers),
     }));
 
-    console.log(
-      `Pool status: ${pool.activeConnections()}/${pool.totalConnections()} active, ${pool.idleConnections()} idle, ${pool.taskQueueSize()} queued`
-    );
-
     res.json(parsedRows);
   } catch (error) {
     console.error(error);
